@@ -937,7 +937,8 @@ rule.</p>
 </pre><div class="source-file"><em>lox/Parser.java</em><br>
 in <em>expression</em>()<br>
 replace 1 line</div>
-<pre class="insert">    <span class="k">return</span> <span class="i">assignment</span>();
+<pre class="insert">    <span class="c">//return assignment();</span>
+    <span class="k">return</span> <span class="i">comma</span>();
 </pre><pre class="insert-after">  }
 </pre></div>
 <div class="source-file-narrow"><em>lox/Parser.java</em>, in <em>expression</em>(), replace 1 line</div>

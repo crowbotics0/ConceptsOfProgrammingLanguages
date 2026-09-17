@@ -46,7 +46,6 @@ class Scanner {
 //> scan-tokens
   List<Token> scanTokens() {
     while (!isAtEnd()) {
-      // We are at the beginning of the next lexeme.
       start = current;
       scanToken();
     }
@@ -67,9 +66,10 @@ class Scanner {
       case '.': addToken(DOT); break;
       case '-': addToken(MINUS); break;
       case '+': addToken(PLUS); break;
+      case '?': addToken(QUESTION); break;
+      case ':': addToken(COLON); break;
       case ';': addToken(SEMICOLON); break;
-      case '*': addToken(STAR); break; // [slash]
-//> two-char-tokens
+      case '*': addToken(STAR); break;
       case '!':
         addToken(match('=') ? BANG_EQUAL : BANG);
         break;
@@ -82,73 +82,32 @@ class Scanner {
       case '>':
         addToken(match('=') ? GREATER_EQUAL : GREATER);
         break;
-//< two-char-tokens
-//> slash
       case '/':
         if (match('/')) {
-          // A comment goes until the end of the line.
           while (peek() != '\n' && !isAtEnd()) advance();
-        } else if (match('*')) {
-          // Track the nesting depth of block comments
-          int nesting = 1;
-
-          while (nesting > 0 && !isAtEnd()) {
-            if (peek() == '\n') {
-              line++;
-            } else if (peek() == '/' && peekNext() == '*') {
-              nesting++;
-              advance(); // Consume '/'
-            } else if (peek() == '*' && peekNext() == '/') {
-              nesting--;
-              advance(); // Consume '*'
-            }
-            advance();
-          }
-
-          if (nesting > 0 && isAtEnd()) {
-            Lox.error(line, "Unterminated block comment.");
-          }
         } else {
           addToken(SLASH);
         }
         break;
-
-//< slash
-//> whitespace
-
       case ' ':
       case '\r':
       case '\t':
-        // Ignore whitespace.
         break;
-
       case '\n':
         line++;
         break;
-//< whitespace
-//> string-start
-
-      case '"': string(); break;
-//< string-start
-//> char-error
-
+      case '"':
+        string();
+        break;
       default:
-/* Scanning char-error < Scanning digit-start
-        Lox.error(line, "Unexpected character.");
-*/
-//> digit-start
         if (isDigit(c)) {
           number();
-//> identifier-start
         } else if (isAlpha(c)) {
           identifier();
-//< identifier-start
         } else {
           Lox.error(line, "Unexpected character.");
         }
-//< digit-start
         break;
-//< char-error
     }
   }
 //< scan-token
@@ -156,24 +115,17 @@ class Scanner {
   private void identifier() {
     while (isAlphaNumeric(peek())) advance();
 
-/* Scanning identifier < Scanning keyword-type
-    addToken(IDENTIFIER);
-*/
-//> keyword-type
     String text = source.substring(start, current);
     TokenType type = keywords.get(text);
     if (type == null) type = IDENTIFIER;
     addToken(type);
-//< keyword-type
   }
 //< identifier
 //> number
   private void number() {
     while (isDigit(peek())) advance();
 
-    // Look for a fractional part.
     if (peek() == '.' && isDigit(peekNext())) {
-      // Consume the "."
       advance();
 
       while (isDigit(peek())) advance();
@@ -195,10 +147,8 @@ class Scanner {
       return;
     }
 
-    // The closing ".
     advance();
 
-    // Trim the surrounding quotes.
     String value = source.substring(start + 1, current - 1);
     addToken(STRING, value);
   }
