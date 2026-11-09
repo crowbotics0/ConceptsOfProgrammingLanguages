@@ -14,6 +14,9 @@ import static com.craftinginterpreters.lox.TokenType.*;
 class Parser {
 //> parse-error
   private static class ParseError extends RuntimeException {}
+  private boolean allowExpression;
+  private boolean foundExpression = false;
+  private int loopDepth = 0;
 
 //< parse-error
   private final List<Token> tokens;
@@ -109,6 +112,7 @@ class Parser {
     if (match(RETURN)) return returnStatement();
     if (match(WHILE)) return whileStatement();
     if (match(LEFT_BRACE)) return new Stmt.Block(block());
+    if (match(BREAK)) return breakStatement();
 
     return expressionStatement();
   }
@@ -139,21 +143,27 @@ class Parser {
 
     Stmt body = statement();
 
-    if (increment != null) {
-      body = new Stmt.Block(
-          Arrays.asList(
-              body,
-              new Stmt.Expression(increment)));
+    try {
+      loopDepth++;
+      Stmt body = statement();
+
+      if (increment != null) {
+        body = new Stmt.Block(Arrays.asList(
+            body,
+            new Stmt.Expression(increment)));
+      }
+
+      if (condition == null) condition = new Expr.Literal(true);
+      body = new Stmt.While(condition, body);
+
+      if (initializer != null) {
+        body = new Stmt.Block(Arrays.asList(initializer, body));
+      }
+
+      return body;
+    } finally {
+      loopDepth--;
     }
-
-    if (condition == null) condition = new Expr.Literal(true);
-    body = new Stmt.While(condition, body);
-
-    if (initializer != null) {
-      body = new Stmt.Block(Arrays.asList(initializer, body));
-    }
-
-    return body;
   }
 
   private Stmt ifStatement() {
@@ -174,6 +184,14 @@ class Parser {
     Expr value = expression();
     consume(SEMICOLON, "Expect ';' after value.");
     return new Stmt.Print(value);
+  }
+
+  private Stmt breakStatement() {
+    if (loopDepth == 0) {
+      error(previous(), "Must be inside a loop to use 'break'.");
+    }
+    consume(SEMICOLON, "Expect ';' after 'break'.");
+    return new Stmt.Break();
   }
 
   private Stmt returnStatement() {
@@ -203,16 +221,28 @@ class Parser {
     consume(LEFT_PAREN, "Expect '(' after 'while'.");
     Expr condition = expression();
     consume(RIGHT_PAREN, "Expect ')' after condition.");
-    Stmt body = statement();
+    try {
+      loopDepth++;
+      Stmt body = statement();
+
+      return new Stmt.While(condition, body);
+    } finally {
+      loopDepth--;
+    }
 
     return new Stmt.While(condition, body);
   }
 
   private Stmt expressionStatement() {
-    Expr expr = expression();
+  Expr expr = expression();
+
+  if (allowExpression && isAtEnd()) {
+    foundExpression = true;
+  } else {
     consume(SEMICOLON, "Expect ';' after expression.");
-    return new Stmt.Expression(expr);
   }
+  return new Stmt.Expression(expr);
+}
 
   private Stmt.Function function(String kind) {
     Token name = consume(IDENTIFIER, "Expect " + kind + " name.");
@@ -231,6 +261,25 @@ class Parser {
     consume(LEFT_BRACE, "Expect '{' before " + kind + " body.");
     List<Stmt> body = block();
     return new Stmt.Function(name, parameters, body);
+  }
+
+  private Expr.Function functionBody(String kind) {
+    consume(LEFT_PAREN, "Expect '(' after " + kind + " name.");
+    List<Token> parameters = new ArrayList<>();
+    if (!check(RIGHT_PAREN)) {
+      do {
+        if (parameters.size() >= 8) {
+          error(peek(), "Can't have more than 8 parameters.");
+        }
+
+        parameters.add(consume(IDENTIFIER, "Expect parameter name."));
+      } while (match(COMMA));
+    }
+    consume(RIGHT_PAREN, "Expect ')' after parameters.");
+
+    consume(LEFT_BRACE, "Expect '{' before " + kind + " body.");
+    List<Stmt> body = block();
+    return new Expr.Function(parameters, body);
   }
 
   private List<Stmt> block() {
@@ -449,6 +498,7 @@ class Parser {
     if (match(FALSE)) return new Expr.Literal(false);
     if (match(TRUE)) return new Expr.Literal(true);
     if (match(NIL)) return new Expr.Literal(null);
+    if (match(FUN)) return functionBody("function");
 
     if (match(NUMBER, STRING)) {
       return new Expr.Literal(previous().literal);
@@ -499,6 +549,12 @@ class Parser {
     return peek().type == type;
   }
 
+  private boolean checkNext(TokenType tokenType) {
+    if (isAtEnd()) return false;
+    if (tokens.get(current + 1).type == EOF) return false;
+    return tokens.get(current + 1).type == tokenType;
+  }
+
   private Token advance() {
     if (!isAtEnd()) current++;
     return previous();
@@ -541,5 +597,22 @@ class Parser {
 
       advance();
     }
+  }
+
+  Object parseRepl() {
+    allowExpression = true;
+    List<Stmt> statements = new ArrayList<>();
+    while (!isAtEnd()) {
+      statements.add(declaration());
+
+      if (foundExpression) {
+        Stmt last = statements.get(statements.size() - 1);
+        return ((Stmt.Expression) last).expression;
+      }
+
+      allowExpression = false;
+    }
+
+    return statements;
   }
 }

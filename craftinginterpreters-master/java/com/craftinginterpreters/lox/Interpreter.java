@@ -110,6 +110,10 @@ class Interpreter implements Expr.Visitor<Object>,
       environment = environment.enclosing;
     }
 
+    beginScope();
+    scopes.peek().put("this", true);
+    scopes.peek().put("inner", true); // <-- Add.
+
     environment.assign(stmt.name, klass);
     return null;
   }
@@ -119,12 +123,17 @@ class Interpreter implements Expr.Visitor<Object>,
     evaluate(stmt.expression);
     return null;
   }
-
+  
   @Override
   public Void visitFunctionStmt(Stmt.Function stmt) {
-    LoxFunction function = new LoxFunction(stmt, environment, false);
-    environment.define(stmt.name.lexeme, function);
-    return null;
+      String fnName = stmt.name.lexeme;
+      environment.define(fnName, new LoxFunction(fnName, stmt.function, environment));
+      return null;
+  }
+
+  @Override
+  public Object visitFunctionExpr(Expr.Function expr) {
+      return new LoxFunction(null, expr, environment);
   }
 
   @Override
@@ -154,7 +163,7 @@ class Interpreter implements Expr.Visitor<Object>,
 
   @Override
   public Void visitVarStmt(Stmt.Var stmt) {
-    Object value = null;
+    Object value = uninitialized;
     if (stmt.initializer != null) {
       value = evaluate(stmt.initializer);
     }
@@ -351,10 +360,14 @@ class Interpreter implements Expr.Visitor<Object>,
     return null;
   }
 
-  @Override
   public Object visitVariableExpr(Expr.Variable expr) {
-    return lookUpVariable(expr.name, expr);
+  Object value = environment.get(expr.name);
+  if (value == uninitialized) {
+    throw new RuntimeError(expr.name,
+        "Variable must be initialized before use.");
   }
+  return value;
+}
 
   private Object lookUpVariable(Token name, Expr expr) {
     Integer distance = locals.get(expr);
@@ -401,5 +414,34 @@ class Interpreter implements Expr.Visitor<Object>,
     }
 
     return object.toString();
+  }
+
+  String interpret(Expr expression) {
+    try {
+      Object value = evaluate(expression);
+      return stringify(value);
+    } catch (RuntimeError error) {
+      Lox.runtimeError(error);
+      return null;
+    }
+  }
+
+    private static class BreakException extends RuntimeException {
+    @Override
+    public Void visitBreakStmt(Stmt.Break stmt) {
+      throw new BreakException();
+    }
+
+    @Override
+  public Void visitWhileStmt(Stmt.While stmt) {
+  try {
+    while (isTruthy(evaluate(stmt.condition))) {
+      execute(stmt.body);
+    }
+      } catch (BreakException ex) {
+        // Do nothing.
+      }
+      return null;
+    }
   }
 }

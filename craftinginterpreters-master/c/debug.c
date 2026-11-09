@@ -66,12 +66,11 @@ static int jumpInstruction(const char* name, int sign,
 //> disassemble-instruction
 int disassembleInstruction(Chunk* chunk, int offset) {
   printf("%04d ", offset);
-//> show-location
-  if (offset > 0 &&
-      chunk->lines[offset] == chunk->lines[offset - 1]) {
+  int line = getLine(chunk, offset);
+  if (offset > 0 && line == getLine(chunk, offset - 1)) {
     printf("   | ");
   } else {
-    printf("%4d ", chunk->lines[offset]);
+    printf("%4d ", line);
   }
 //< show-location
   
@@ -179,6 +178,8 @@ int disassembleInstruction(Chunk* chunk, int offset) {
 //> Superclasses disassemble-super-invoke
     case OP_SUPER_INVOKE:
       return invokeInstruction("OP_SUPER_INVOKE", chunk, offset);
+    case OP_CONSTANT_LONG:
+      return longConstantInstruction("OP_CONSTANT_LONG", chunk, offset);
 //< Superclasses disassemble-super-invoke
 //> Closures disassemble-closure
     case OP_CLOSURE: {
@@ -226,3 +227,13 @@ int disassembleInstruction(Chunk* chunk, int offset) {
   }
 }
 //< disassemble-instruction
+static int longConstantInstruction(const char* name, Chunk* chunk,
+                                   int offset) {
+  uint32_t constant = chunk->code[offset + 1] |
+                     (chunk->code[offset + 2] << 8) |
+                     (chunk->code[offset + 3] << 16);
+  printf("%-16s %4d '", name, constant);
+  printValue(chunk->constants.values[constant]);
+  printf("'\n");
+  return offset + 4;
+}

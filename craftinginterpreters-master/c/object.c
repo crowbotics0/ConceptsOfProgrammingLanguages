@@ -156,6 +156,21 @@ ObjString* takeString(char* chars, int length) {
     FREE_ARRAY(char, chars, length + 1);
     return interned;
   }
+ObjString* makeString(int length) {
+  ObjString* string = (ObjString*)allocateObject(
+      sizeof(ObjString) + length + 1, OBJ_STRING);
+  string->length = length;
+  return string;
+}
+
+ObjString* copyString(const char* chars, int length) {
+  ObjString* string = makeString(length);
+
+  memcpy(string->chars, chars, length);
+  string->chars[length] = '\0';
+
+  return string;
+}
 
 //< take-string-intern
   return allocateString(chars, length, hash);
@@ -163,24 +178,12 @@ ObjString* takeString(char* chars, int length) {
 }
 //< take-string
 ObjString* copyString(const char* chars, int length) {
-//> Hash Tables copy-string-hash
-  uint32_t hash = hashString(chars, length);
-//> copy-string-intern
-  ObjString* interned = tableFindString(&vm.strings, chars, length,
-                                        hash);
-  if (interned != NULL) return interned;
+  ObjString* string = makeString(length);
 
-//< copy-string-intern
-//< Hash Tables copy-string-hash
-  char* heapChars = ALLOCATE(char, length + 1);
-  memcpy(heapChars, chars, length);
-  heapChars[length] = '\0';
-/* Strings object-c < Hash Tables copy-string-allocate
-  return allocateString(heapChars, length);
-*/
-//> Hash Tables copy-string-allocate
-  return allocateString(heapChars, length, hash);
-//< Hash Tables copy-string-allocate
+  memcpy(string->chars, chars, length);
+  string->chars[length] = '\0';
+
+  return string;
 }
 //> Closures new-upvalue
 ObjUpvalue* newUpvalue(Value* slot) {
@@ -251,3 +254,23 @@ void printObject(Value value) {
   }
 }
 //< print-object
+static uint32_t hashDouble(double value) {
+  union BitCast {
+    double value;
+    uint32_t ints[2];
+  };
+
+  union BitCast cast;
+  cast.value = (value) + 1.0;
+  return cast.ints[0] + cast.ints[1];
+}
+
+uint32_t hashValue(Value value) {
+  switch (value.type) {
+    case VAL_BOOL:   return AS_BOOL(value) ? 3 : 5;
+    case VAL_NIL:    return 7;
+    case VAL_NUMBER: return hashDouble(AS_NUMBER(value));
+    case VAL_OBJ:    return AS_STRING(value)->hash;
+    case VAL_EMPTY:  return 0;
+  }
+}
