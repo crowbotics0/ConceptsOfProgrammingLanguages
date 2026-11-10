@@ -845,6 +845,7 @@ static InterpretResult run() {
         break;
 //< Methods and Initializers interpret-method
     }
+    case OP_DUP: push(peek(0)); break;
   }
 
 #undef READ_BYTE
