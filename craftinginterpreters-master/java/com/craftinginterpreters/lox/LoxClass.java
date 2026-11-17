@@ -8,7 +8,7 @@ import java.util.Map;
 class LoxClass {
 */
 //> lox-class-callable
-class LoxClass implements LoxCallable {
+class LoxClass extends LoxInstance implements LoxCallable {
 //< lox-class-callable
   final String name;
 //> Inheritance lox-class-superclass-field
@@ -36,10 +36,25 @@ class LoxClass implements LoxCallable {
   }
 //< lox-class-methods
 //> lox-class-find-method
-  LoxFunction findMethod(String name) {
-    if (methods.containsKey(name)) {
-      return methods.get(name);
+  LoxFunction findMethod(LoxInstance instance, String name) {
+    LoxFunction method = null;
+    LoxFunction inner = null;
+    LoxClass klass = this;
+    while (klass != null) {
+      if (klass.methods.containsKey(name)) {
+        inner = method;
+        method = klass.methods.get(name);
+      }
+
+      klass = klass.superclass;
     }
+
+    if (method != null) {
+      return method.bind(instance, inner);
+    }
+
+    return null;
+  }
 
 //> Inheritance find-method-recurse-superclass
     if (superclass != null) {
@@ -57,16 +72,13 @@ class LoxClass implements LoxCallable {
   }
 //> lox-class-call-arity
   @Override
-  public Object call(Interpreter interpreter,
-                     List<Object> arguments) {
+  public Object call(Interpreter interpreter, List<Object> arguments) {
     LoxInstance instance = new LoxInstance(this);
-//> lox-class-call-initializer
-    LoxFunction initializer = findMethod("init");
+    LoxFunction initializer = findMethod(instance, "init");
     if (initializer != null) {
-      initializer.bind(instance).call(interpreter, arguments);
+      initializer.call(interpreter, arguments);
     }
 
-//< lox-class-call-initializer
     return instance;
   }
 
