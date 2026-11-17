@@ -44,6 +44,7 @@ static void resetStack() {
 //< reset-stack
 //> Types of Values runtime-error
 static void runtimeError(const char* format, ...) {
+  ObjFunction* function = getFrameFunction(frame);
   va_list args;
   va_start(args, format);
   vfprintf(stderr, format, args);
@@ -168,41 +169,32 @@ static bool call(ObjFunction* function, int argCount) {
 */
 //> Calls and Functions call
 //> Closures call-signature
-static bool call(ObjClosure* closure, int argCount) {
-//< Closures call-signature
-/* Calls and Functions check-arity < Closures check-arity
+static bool call(Obj* callee, ObjFunction* function, int argCount) {
   if (argCount != function->arity) {
     runtimeError("Expected %d arguments but got %d.",
         function->arity, argCount);
-*/
-//> Closures check-arity
-  if (argCount != closure->function->arity) {
-    runtimeError("Expected %d arguments but got %d.",
-        closure->function->arity, argCount);
-//< Closures check-arity
-//> check-arity
     return false;
   }
 
-//< check-arity
-//> check-overflow
   if (vm.frameCount == FRAMES_MAX) {
     runtimeError("Stack overflow.");
     return false;
   }
 
-//< check-overflow
   CallFrame* frame = &vm.frames[vm.frameCount++];
-/* Calls and Functions call < Closures call-init-closure
-  frame->function = function;
+  frame->function = (Obj*)callee;
   frame->ip = function->chunk.code;
-*/
-//> Closures call-init-closure
-  frame->closure = closure;
-  frame->ip = closure->function->chunk.code;
-//< Closures call-init-closure
+
   frame->slots = vm.stackTop - argCount - 1;
   return true;
+}
+
+static bool callClosure(ObjClosure* closure, int argCount) {
+  return call((Obj*)closure, closure->function, argCount);
+}
+
+static bool callFunction(ObjFunction* function, int argCount) {
+  return call((Obj*)function, function, argCount);
 }
 //< Calls and Functions call
 //> Calls and Functions call-value
@@ -240,7 +232,9 @@ static bool callValue(Value callee, int argCount) {
 //< Classes and Instances call-class
 //> Closures call-value-closure
       case OBJ_CLOSURE:
-        return call(AS_CLOSURE(callee), argCount);
+        return callClosure(AS_CLOSURE(callee), argCount);
+      case OBJ_FUNCTION:
+        return callFunction(AS_FUNCTION(callee), argCount);
 //< Closures call-value-closure
 /* Calls and Functions call-value < Closures call-value-closure
       case OBJ_FUNCTION: // [switch]
@@ -359,6 +353,13 @@ static void defineMethod(ObjString* name) {
   ObjClass* klass = AS_CLASS(peek(1));
   tableSet(&klass->methods, name, method);
   pop();
+}
+static inline ObjFunction* getFrameFunction(CallFrame* frame) {
+  if (frame->function->type == OBJ_FUNCTION) {
+    return (ObjFunction*)frame->function;
+  } else {
+    return ((ObjClosure*)frame->function)->function;
+  }
 }
 //< Methods and Initializers define-method
 //> Types of Values is-falsey
